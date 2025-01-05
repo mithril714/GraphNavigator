@@ -11,189 +11,123 @@ using System.IO;
 using System.Diagnostics;
 using System.Xml.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace GraphNavigator
 {
 
     public partial class Form1 : Form
     {
-        private PictureBox pictureBox;
-        private Dictionary<string, (float x, float y)> nodePositions;
         public Form1()
         {
             InitializeComponent();
 
-            pictureBox = new PictureBox()
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.StretchImage
-            };
-            this.Controls.Add(pictureBox);
-
-            var dotPath = "chart.dot";
-            var imagePath = "chart.png";
-            var svgPath = "chart.svg";
-
-            GraphvizHelper.CreateDotFile(dotPath);
-            GraphvizHelper.GenerateSvg(dotPath, svgPath);
-            GraphvizHelper.GenerateImage(dotPath, imagePath);
-
-
-            // SVGからノード情報を抽出
-            nodePositions = SvgParser.ExtractNodePositions(svgPath);
-
-            pictureBox.Image = System.Drawing.Image.FromFile(imagePath);
-            pictureBox.MouseClick += PictureBox_MouseClick;
         }
 
-        private void PictureBox_MouseClick(object sender, MouseEventArgs e)
+        private void button2_Click(object sender, EventArgs e)
+        {
+            // Form2のインスタンスを生成
+            Form2 form2 = new Form2();
+            // form2を表示
+            form2.Show();
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            this.Close();
+        }
+
+        private void button4_Click(object sender, EventArgs e)
         {
 
-            // クリック位置（PictureBox内の座標）
-            var clickedX = e.X;
-            var clickedY = e.Y;
-            
-            // SVGのviewBoxから画像の元サイズを取得
-            float svgWidth = 0, svgHeight = 0;
-            using (var reader = new System.Xml.XmlTextReader("chart.svg"))
+            string folderPath = textBox1.Text;
+            if (!Directory.Exists(folderPath))
             {
-                while (reader.Read())
+                Console.WriteLine("指定されたフォルダが存在しません。");
+                return;
+            }
+
+            // 指定フォルダ内のすべての .txt ファイルを取得
+            string[] fileNames = Directory.GetFiles(folderPath, "*.txt");
+
+            // ファイル間の関係を格納する辞書
+            Dictionary<string, List<string>> relationships = new Dictionary<string, List<string>>();
+
+            foreach (var fileName in fileNames)
+            {
+                // ファイルの中身を読み込む
+                if (File.Exists(fileName))
                 {
-                    if (reader.NodeType == System.Xml.XmlNodeType.Element && reader.Name == "svg")
-                    {
-                        var viewBox = reader.GetAttribute("viewBox");
-                        if (!string.IsNullOrEmpty(viewBox))
-                        {
-                            var parts = viewBox.Split(' ');
-                            if (parts.Length == 4 &&
-                                float.TryParse(parts[2], out svgWidth) &&
-                                float.TryParse(parts[3], out svgHeight))
-                            {
-                                break;
-                            }
-                        }
-                    }
+                    var lines = File.ReadAllLines(fileName);
+                    var targets = lines
+                        .Where(line => line.StartsWith("MENU"))
+                        .Select(line => line.Split(' ')[1].Trim())
+                        .ToList();
+
+                    // 関係性を記録
+                    relationships[fileName] = targets;
+                }
+                else
+                {
+                    Console.WriteLine($"File {fileName} does not exist.");
                 }
             }
 
-            // PictureBoxの表示サイズを取得
-            var displayWidth = pictureBox.ClientSize.Width;
-            var displayHeight = pictureBox.ClientSize.Height;
+            // DOT 言語形式で出力
+            string dotContent = GenerateDotContent(relationships);
 
-            // クリック位置を元画像の座標系に変換
-            var originalX = clickedX * (svgWidth / displayWidth);
-            var originalY = (displayHeight - clickedY) * (svgHeight / displayHeight); // Y座標を反転j
-            // ノードとの一致を判定
-            foreach (var node in nodePositions)
+            // DOT ファイルを保存
+            File.WriteAllText("graph.dot", dotContent);
+            Console.WriteLine("Graphviz DOT file generated: graph.dot");
+
+            GraphvizHelper.GenerateImage("graph.dot", "graph.png");
+        }
+        static string GenerateDotContent(Dictionary<string, List<string>> relationships)
+        {
+            var dot = "digraph G {\n";
+
+            foreach (var kvp in relationships)
             {
-                var (nodeX, nodeY) = node.Value;
-
-                // クリック位置がノードの近くであるか判定（半径10ピクセル以内）
-                if (Math.Abs(originalX - nodeX) < 30 && Math.Abs(originalY - nodeY) < 30)
+                string source = Path.GetFileName(kvp.Key); // ファイル名
+                foreach (var target in kvp.Value)
                 {
-                    MessageBox.Show($"Clicked node: {node.Key}");
-                    return;
+                    string targetFile = Path.GetFileName(target);
+                    dot += $"    \"{source}\" -> \"{targetFile}\";\n";
                 }
             }
 
-            MessageBox.Show("No node clicked.");
+            dot += "}";
+            return dot;
         }
 
-        private void PictureBox_Click(object sender, EventArgs e)
+        private void button5_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("PictureBoxがクリックされました！");
-        }
-
-        [STAThread]
-        static void Main()
-        {
-            Application.EnableVisualStyles();
-            Application.Run(new Form1());
-        }
-    }
-    public class GraphvizHelper
-    {
-        public static void CreateDotFile(string path)
-        {
-            var dotContent = @"
-        digraph G {
-            A [label=""Start""];
-            B [label=""Process""];
-            C [label=""End""];
-            A -> B;
-            B -> C;
-        }";
-            File.WriteAllText(path, dotContent);
-        }
-
-        public static void GenerateImage(string dotPath, string outputPath)
-        {
-            var process = new Process
+            using (var dlg = new OpenFileDialog())
             {
-                StartInfo = new ProcessStartInfo
+                dlg.Title = "フォルダを選択してください。";
+                dlg.FileName = "SelectFolder";
+                dlg.Filter = "Folder|.";
+                dlg.CheckFileExists = false;
+
+                if (dlg.ShowDialog() == DialogResult.OK)
                 {
-                    FileName = "dot",
-                    Arguments = $"-Tpng \"{dotPath}\" -o \"{outputPath}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
 
-            process.Start();
-            process.WaitForExit();
-        }
-        public static void GenerateSvg(string dotPath, string svgPath)
-        {
-            var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "dot",
-                    Arguments = $"-Tsvg \"{dotPath}\" -o \"{svgPath}\"",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            process.WaitForExit();
-        }
-
-    }
-    public class SvgParser
-    {
-        public static Dictionary<string, (float x, float y)> ExtractNodePositions(string svgPath)
-        {
-            var nodePositions = new Dictionary<string, (float x, float y)>();
-            var svgDocument = XDocument.Load(svgPath);
-
-            // 名前空間の取得
-            XNamespace ns = svgDocument.Root.Name.Namespace;
-
-            // <g>タグ内のノード情報を取得
-            foreach (var group in svgDocument.Descendants(ns + "g"))
-            {
-                var titleElement = group.Element(ns + "title");
-                var ellipseElement = group.Element(ns + "ellipse");
-
-                if (titleElement != null && ellipseElement != null)
-                {
-                    var nodeName = titleElement.Value;
-
-                    if (float.TryParse(ellipseElement.Attribute("cx")?.Value, out float x) &&
-                        float.TryParse(ellipseElement.Attribute("cy")?.Value, out float y))
-                    {
-                        // SVGの座標系に合わせてY座標を反転
-                        nodePositions[nodeName] = (x, -y);
-                    }
+//                    MessageBox.Show(System.IO.Path.GetDirectoryName(dlg.FileName));
+                    textBox1.Text = System.IO.Path.GetDirectoryName(dlg.FileName);
                 }
             }
 
-            return nodePositions;
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void textBox2_TextChanged(object sender, EventArgs e)
+        {
+
         }
     }
 }
