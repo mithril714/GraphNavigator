@@ -51,28 +51,29 @@ namespace GraphNavigator
             // 指定フォルダ内のすべての .txt ファイルを取得
             string[] fileNames = Directory.GetFiles(folderPath, "*.txt");
 
+            if (fileNames.Length == 0)
+            {
+                Console.WriteLine("フォルダ内に .txt ファイルがありません。");
+                return;
+            }
+
             // ファイル間の関係を格納する辞書
             Dictionary<string, List<string>> relationships = new Dictionary<string, List<string>>();
 
-            foreach (var fileName in fileNames)
+            foreach (var filePath in fileNames)
             {
                 // ファイルの中身を読み込む
-                if (File.Exists(fileName))
-                {
-                    var lines = File.ReadAllLines(fileName);
-                    var targets = lines
-                        .Where(line => line.StartsWith("MENU"))
-                        .Select(line => line.Split(' ')[1].Trim())
-                        .ToList();
+                var lines = File.ReadAllLines(filePath);
+                var targets = lines
+                    .Where(line => line.Contains("MENU")) // "MENU" を含む行を抽出
+                    .SelectMany(line => ExtractTargets(line)) // ファイル名を抽出
+                    .Distinct() // 重複を除去
+                    .ToList();
 
-                    // 関係性を記録
-                    relationships[fileName] = targets;
-                }
-                else
-                {
-                    Console.WriteLine($"File {fileName} does not exist.");
-                }
+                // 関係性を記録
+                relationships[filePath] = targets;
             }
+
 
             // DOT 言語形式で出力
             string dotContent = GenerateDotContent(relationships);
@@ -83,6 +84,17 @@ namespace GraphNavigator
 
             GraphvizHelper.GenerateImage("graph.dot", "graph.png");
         }
+
+        // "MENU ファイル名" のパターンからファイル名を抽出
+        static IEnumerable<string> ExtractTargets(string line)
+        {
+            var matches = Regex.Matches(line, @"MENU\s+([^\s]+)");
+            foreach (Match match in matches)
+            {
+                yield return match.Groups[1].Value.Trim();
+            }
+        }
+
         static string GenerateDotContent(Dictionary<string, List<string>> relationships)
         {
             var dot = "digraph G {\n";
