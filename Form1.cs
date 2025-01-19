@@ -67,6 +67,7 @@ namespace GraphNavigator
                 var targets = lines
                     .Where(line => line.Contains("MENU")) // "MENU" を含む行を抽出
                     .SelectMany(line => ExtractTargets(line)) // ファイル名を抽出
+                    .Where(target => File.Exists(Path.Combine(folderPath, target))) // 存在するファイルのみ
                     .Distinct() // 重複を除去
                     .ToList();
 
@@ -88,6 +89,7 @@ namespace GraphNavigator
         // "MENU ファイル名" のパターンからファイル名を抽出
         static IEnumerable<string> ExtractTargets(string line)
         {
+            // "MENU" を含むすべての単語パターンを抽出
             var matches = Regex.Matches(line, @"MENU\s+([^\s]+)");
             foreach (Match match in matches)
             {
