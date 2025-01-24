@@ -89,11 +89,17 @@ namespace GraphNavigator
         // "MENU ファイル名" のパターンからファイル名を抽出
         static IEnumerable<string> ExtractTargets(string line)
         {
-            // "MENU" を含むすべての単語パターンを抽出
-            var matches = Regex.Matches(line, @"MENU\s+([^\s]+)");
+            // "MENU" に続くファイル名（演算子や余分な文字を除外）
+            var matches = Regex.Matches(line, @"MENU\s+([^\s|]+)");
             foreach (Match match in matches)
             {
-                yield return match.Groups[1].Value.Trim();
+                // ファイル名部分のみを取得
+                var extractedFileName = match.Groups[1].Value.Trim();
+
+                // 演算子や余分な文字を削除する（例: 拡張子後の「||」など）
+                extractedFileName = Regex.Replace(extractedFileName, @"[^\w\-.]", "");
+
+                yield return extractedFileName;
             }
         }
 
